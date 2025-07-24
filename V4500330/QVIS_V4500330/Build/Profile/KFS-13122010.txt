@@ -1,0 +1,90 @@
+/* Geometry Section 1 */
+01:rStartDiameterS1:=3003.0;
+02:rEndDiameterS1:=3003.0;
+03:rLengthS1:=26.0;
+04:rPitchS1:=3.00000011920929e-1;
+05:rActiveS1:=1;
+/* Geometry Section 2 */
+06:rStartDiameterS2:=3003.0;
+07:rEndDiameterS2:=2989.0;
+08:rLengthS2:=18.0;
+09:rPitchS2:=3.00000011920929e-1;
+10:rActiveS2:=1;
+/* Geometry Section 3 */
+11:rStartDiameterS3:=2989.0;
+12:rEndDiameterS3:=2965.0;
+13:rLengthS3:=13.0;
+14:rPitchS3:=3.00000011920929e-1;
+15:rActiveS3:=1;
+/* Geometry Section 4 */
+16:rStartDiameterS4:=2965.0;
+17:rEndDiameterS4:=2967.0;
+18:rLengthS4:=3.0;
+19:rPitchS4:=3.00000011920929e-1;
+20:rActiveS4:=0;
+/* Geometry Section 5 */
+21:rStartDiameterS5:=2986.0;
+22:rEndDiameterS5:=2966.0;
+23:rLengthS5:=13.0;
+24:rPitchS1:=3.00000011920929e-1;
+25:rActiveS5:=0;
+/* Geometry Section 6 */
+26:rStartDiameterS6:=2966.0;
+27:rEndDiameterS6:=2967.0;
+28:rLengthS6:=2.0;
+29:rPitchS6:=3.00000011920929e-1;
+30:rActiveS6:=0;
+/* Prism Parameter */
+31:rPrismaDistanceD1:=6500.0;
+32:rPrismaDistanceD2:=700.0;
+33:rPrismaAngleA:=108.0;
+34:bStateInputPrisma:=2;
+35:rToolDiameterMin:=2111.97802734375;
+36:rToolDiameterMax:=11058.4609375;
+37:rPrismaFactor:=1.11802995204926;
+/* Auto Geometry */
+38:iCycleGeometry:=1;
+39:rPlungeCycleGrindFeedGeometry:=800.0;
+40:rDisplaceLengthToolFeedGeometry:=1.00000001490116e-1;
+41:rDisplaceSpeedGrindFeedGeometry:=100.0;
+42:rPlungeLengthToolFeedGeometry:=10.0;
+43:rPlungeSpeedGrindFeedGeometry:=10.0;
+44:rSpeedToolRotationGeometry:=548.0;
+45:rDisplaceActivationGeometry:=1;
+46:rPlungeActivationGeometry:=0;
+/* Auto Groove */
+47:rDisplaceLengthToolFeedGroove:=10.0;
+48:rDisplaceSpeedGrindFeedGroove:=10.0;
+49:rPitchGroove:=20.0;
+50:rPlungeLengthToolFeedGroove:=10.0;
+51:rPlungeSpeedGrindFeedGroove:=10.0;
+52:rSpeedToolRotationGroove:=15.0;
+53:iNumberOfGrooves:=5;
+54:rDisplaceActivationGroove:=1;
+55:rPlungeActivationGroove:=0;
+56:rBlockGrindFeeder:=0;
+/* Calibration */
+57:rDisplaceLengthToolFeedCalib:=10.0;
+58:rDisplaceSpeedGrindFeedCalib:=10.0;
+59:rMeasureOffsetToolFeedCalib:=1.0;
+60:rMeasurePosToolFeedCalib:=340.0;
+61:rPitchCalib:=3.00000011920929e-1;
+62:rPlungeLengthGrindFeedCalib:=50.0;
+63:rPlungeLengthToolFeedCalib:=10.0;
+64:rPlungeSpeedGrindFeedCalib:=10.0;
+65:rSpeedToolRotationCalib:=547.0;
+66:rStartPosToolFeedCalib:=16.0;
+67:rToolLengthCylinderPartCalib:=5.0;
+68:rDisplaceActivationCalib:=1;
+69:rPlungeActivationCalib:=0;
+/* Process Para */
+70:rOffsetBeforeToolDiaGrindFeedProcess:=2.0;
+71:rSecurityPosGrindFeedProcess:=500.0;
+72:rSpeedBackwardGrindFeed:=300.0;
+73:rSpeedForwardFastGrindFeed:=100.0;
+74:rSpeedForwardSlowGrindFeed:=30.0;
+75:rSpeedStartPosToolFeedProcess:=30.0;
+76:rStartPosToolFeedAuto:=10.0;
+77:rToolDiameterProcess:=3050.0;
+78:rToolTensionProcess:=250.0;
+79:iSpeedGrindSpindle:=3300;
