@@ -7595,345 +7595,6 @@ END_FUNCTION_BLOCK
 (* @PATH := '\/GENERAL' *)
 (* @OBJECTFLAGS := '0, 8' *)
 (* @SYMFILEFLAGS := '2048' *)
-FUNCTION_BLOCK FB_PROCESS
-VAR_INPUT
-END_VAR
-VAR_IN_OUT
-	T_Process : ST_PROCESS;				(* data structure of the processlevel *)
-	T_Station : ST_STATION;					(* data structure of the stationlevel *)
-	T_ExchgParam:ST_QVIS_EXCHG_PARAM;	(* data structure of the visualisation *)
-	T_NovRAMData:ST_DATA_RETAIN;		(* data structure of the NovRam *)
-END_VAR
-VAR_OUTPUT
-	xStatusRdy : BOOL := FALSE;				(* state of the processlevel if it is ready or not *)
-	xStatusEnd : BOOL := FALSE;				(* state of the processlevel if a process is active or not *)
-	xStatusStop : BOOL := FALSE;				(* state of the processlevel if a process will be stopped *)
-	xStatusRef : BOOL := FALSE;				(* state of the processlevel if the machine is referenced *)
-	xError : BOOL := FALSE;					(* state of the processlevel if the machine has an error *)
-	iErrorNr : DINT :=0;							(* state of the processlevel if the machine has an error, in this case it will give the errornumber *)
-	iStatusFctNr : INT := 0;						(* state of the processlevel, which process is active *)
-END_VAR
-VAR
-	xStartFunction: BOOL;
-	xSetEnd: BOOL;
-	iPrcFunctionNr: INT;
-	xProcessError: BOOL;
-	xInitError: BOOL;
-	xTmpStart: BOOL;
-	xInitStart: BOOL;
-	xInitStop: BOOL;
-	xTmpStopFunction: BOOL;
-	xDisable: BOOL;
-	xResetRef: BOOL;
-	xInitStopCycle: BOOL;
-	xTmpStopCycleFunction: BOOL;
-(* end modif test torque *)
-	FBErrorMessage : FB_ErrorMessage;
-	FBPrcMachineReference: FB_PrcMachineReference;
-	FBPrcAutoGeometry: FB_PrcAutoGeometry;
-	diTmpErrorNr: DINT;
-	xResetAutoGeometry: BOOL;
-	FBPrcAutoGroove: FB_PrcAutoGroove;
-	xResetAutoGroove: BOOL;
-	FBPrcToolCalibration: FB_PrcToolCalibration;
-	xResetToolCalibration: BOOL;
-END_VAR
-(* @END_DECLARATION := '0' *)
-(****************************************************************************************************************************************************)
-(***********                                            This Functionblock manage all the machine process                                                             ************)
-(****************************************************************************************************************************************************)
-IF NOT(T_Process.xEnable) THEN
-	T_Process.xRdy:=FALSE;
-	xDisable:=TRUE;
-	RETURN;
-ELSE
-	IF xDisable THEN
-		T_Process.xRdy:=TRUE;
-		xDisable:=FALSE;
-		xSetEnd:=TRUE;
-	END_IF;
-END_IF;
-(******************************************************************************************************************************************)
-(****************************				                  Status Part                                                            *****************************)
-(******************************************************************************************************************************************)
-xStatusRdy:=T_Process.xRdy;
-xStatusEnd:=T_Process.xEnd;
-xStatusRef:=T_Station.TControl.xReferenced;
-T_Process.xReferenced:=xStatusRef;
-xError:=T_Process.xError;
-iStatusFctNr:=iPrcFunctionNr;
-
-
-(******************************************************************************************************************************************)
-(****************************				         Error Controlling Part                                                  *****************************)
-(******************************************************************************************************************************************)
-IF xProcessError OR (T_Process.TFctProcess.xError AND T_Process.xRdy AND NOT(xSetEnd)) THEN
-	IF NOT(xInitError) THEN
-		xInitError:=TRUE;
-		xProcessError:=TRUE;
-		T_Process.TFctProcess.xQuitErr:=TRUE;
-		T_Process.xProcessHold:=FALSE;
-		diTmpErrorNr:=T_Process.TFctProcess.diErrorNr;
-	END_IF;
-	IF NOT(T_Process.TFctProcess.xQuitErr) AND T_Process.TFctProcess.xEnd AND (T_Process.diErrorNr = 0)THEN
-		FBErrorMessage(	diErrorNr:=diTmpErrorNr,
-						T_ErrorList:=T_ErrorList);
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextEnglish:=FBErrorMessage.sErrorTextEnglish;
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextDeutsch:=FBErrorMessage.sErrorTextDeutsch;
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextFrancais:=FBErrorMessage.sErrorTextFrancais;
-		T_Process.diErrorNr:=diTmpErrorNr;
-		T_Process.xError:=TRUE;
-	END_IF;
-	IF T_Process.xQuitError AND NOT(T_Process.TFctProcess.xQuitErr) THEN
-		T_Process.xProcessHold:=FALSE;
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextEnglish:='';
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextDeutsch:='';
-		T_ExchgParam.T_Visu.T_Message.sDynamicTextFrancais:='';
-		xInitError:=FALSE;
-		T_Process.xQuitError:=FALSE;
-		xSetEnd:=TRUE;
-	END_IF;
-END_IF;
-(******************************************************************************************************************************************)
-(****************************				         Main Controlling Part                                                  *****************************)
-(******************************************************************************************************************************************)
-IF (T_Process.xStart OR xTmpStart) AND T_Process.xRdy AND NOT(xSetEnd) THEN
-	IF NOT(xInitStart) THEN
-		xInitStart:=TRUE;
-		xTmpStart:=TRUE;
-		T_Process.xStop:=FALSE;
-		T_Process.xStopCycle:=FALSE;
-		T_Process.xStart:=FALSE;
-		T_Process.xEnd:=FALSE;
-		T_Process.xProcessHold:=FALSE;
-		T_Process.TFctProcess.xStart:=TRUE;
-		xStartFunction:=TRUE;
-		iPrcFunctionNr:=T_Process.iFunctNr;
-	END_IF;
-	IF T_Process.xAbord AND (T_Process.xStopCycle OR T_Process.xStop) THEN
-		T_Process.xStopCycle:=T_Process.xStop:=FALSE;		(* Prozess ist am abbrechen, diese Flag können nicht mehr berücksichtigt werden *)
-	END_IF;
-	IF T_Process.xStopCycle THEN
-		IF NOT(xInitStopCycle) THEN
-			xInitStopCycle:=TRUE;
-			T_Process.TFctProcess.xStopCycle:=TRUE;
-		END_IF;
-		IF NOT(T_Process.TFctProcess.xStopCycle) AND T_Process.TFctProcess.xProcessHold THEN
-			xInitStopCycle:=FALSE;
-			T_Process.xStopCycle:=FALSE;
-			T_Process.xProcessHold:=TRUE;
-			xTmpStopCycleFunction:=TRUE;
-		END_IF;
-		IF NOT(T_Process.TFctProcess.xStopCycle) AND NOT(T_Process.TFctProcess.xProcessHold) THEN
-			xInitStopCycle:=FALSE;
-			T_Process.xStopCycle:=FALSE;
-			T_Process.xProcessHold:=FALSE;
-			xTmpStopCycleFunction:=FALSE;
-		END_IF;
-	END_IF;
-	IF T_Process.xStop THEN
-		IF NOT(xInitStop) THEN
-			xInitStop:=TRUE;
-			T_Process.TFctProcess.xStop:=TRUE;
-		END_IF;
-		IF NOT(T_Process.TFctProcess.xStop) AND T_Process.TFctProcess.xProcessHold THEN
-			xInitStop:=FALSE;
-			T_Process.xProcessHold:=TRUE;
-			T_Process.xStop:=FALSE;
-			xTmpStopFunction:=TRUE;
-		END_IF;
-		IF NOT(T_Process.TFctProcess.xStop) AND NOT(T_Process.TFctProcess.xProcessHold) THEN
-			xInitStop:=FALSE;
-			T_Process.xStop:=FALSE;
-			T_Process.xProcessHold:=FALSE;
-			xTmpStopFunction:=FALSE;
-		END_IF;
-	END_IF;
-	IF T_Process.xStart AND (xTmpStopFunction OR xTmpStopCycleFunction) AND NOT(T_Process.xAbord) THEN
-		T_Process.xStart:=T_Process.xProcessHold:=FALSE;
-		xTmpStopFunction:=FALSE;
-		xTmpStopCycleFunction:=FALSE;
-		T_Process.TFctProcess.xStart:=TRUE;
-	END_IF;
-	IF T_Process.xAbord AND (xTmpStopFunction OR xTmpStopCycleFunction) THEN
-		T_Process.xProcessHold:=FALSE;
-		T_Process.xStart:=FALSE;
-		xTmpStopFunction:=FALSE;
-		xTmpStopCycleFunction:=FALSE;
-		T_Process.TFctProcess.xAbord:=TRUE;
-	END_IF;
-	IF NOT(T_Process.TFctProcess.xStart) AND T_Process.TFctProcess.xEnd AND NOT(xProcessError) THEN
-		xTmpStart:=FALSE;
-		xInitStart:=FALSE;
-		xSetEnd:=TRUE;
-	END_IF;
-END_IF;
-(******************************************************************************************************************************************)
-(****************************				              Funktionen                                                               *****************************)
-(******************************************************************************************************************************************)
-IF xStartFunction AND NOT(xSetEnd) THEN
-	IF (iPrcFunctionNr = 10) THEN
-	(* Process AutoGeometry *)
-		FBPrcAutoGeometry(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-							xStart:=T_Process.TFctProcess.xStart ,
-							xStop:=T_Process.TFctProcess.xStop ,
-							xStopCycle:=T_Process.TFctProcess.xStopCycle,
-							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-							xAbord:=T_Process.TFctProcess.xAbord ,
-							T_Station:= T_Station,
-							T_Process:= T_Process,
-							xReset:= xResetAutoGeometry,
-							T_ExchgParam:= T_ExchgParam,
-							T_NovRAMData:=T_NovRAMData,
-							xEnd=>T_Process.TFctProcess.xEnd ,
-							xError=>T_Process.TFctProcess.xError ,
-							diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	END_IF;
-	IF (iPrcFunctionNr = 20) THEN
-	(* Process AutoGroove *)
-		FBPrcAutoGroove(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-							xStart:=T_Process.TFctProcess.xStart ,
-							xStop:=T_Process.TFctProcess.xStop ,
-							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-							xAbord:=T_Process.TFctProcess.xAbord ,
-							T_Station:= T_Station,
-							T_Process:= T_Process,
-							xReset:= xResetAutoGroove,
-							T_ExchgParam:= T_ExchgParam,
-							xDoNotMoveGrindPosition:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xBlockGrindFeeder,
-							xPlungeActive:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xPlungeActivationGroove,
-							T_NovRAMData:=T_NovRAMData,
-							xEnd=>T_Process.TFctProcess.xEnd ,
-							xError=>T_Process.TFctProcess.xError ,
-							diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	END_IF;
-	IF (iPrcFunctionNr = 30) THEN
-	(* Process Machine Reference *)
-		FBPrcMachineReference(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-								xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-								xStart:=T_Process.TFctProcess.xStart ,
-								xStop:=T_Process.TFctProcess.xStop ,
-								xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-								xAbord:=T_Process.TFctProcess.xAbord ,
-								T_Station:= T_Station,
-								T_Process:= T_Process,
-								xReset:= xResetRef,
-								T_ExchgParam:= T_ExchgParam,
-								T_NovRAMData:=T_NovRAMData,
-								xEnd=>T_Process.TFctProcess.xEnd ,
-								xError=>T_Process.TFctProcess.xError ,
-								diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	END_IF;
-	IF (iPrcFunctionNr = 40) THEN
-	(* Process ToolCalibration *)
-		FBPrcToolCalibration(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-							xStart:=T_Process.TFctProcess.xStart ,
-							xStop:=T_Process.TFctProcess.xStop ,
-							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-							xAbord:=T_Process.TFctProcess.xAbord ,
-							T_Station:= T_Station,
-							T_Process:= T_Process,
-							xReset:= xResetAutoGeometry,
-							T_ExchgParam:= T_ExchgParam,
-							T_NovRAMData:=T_NovRAMData,
-							xEnd=>T_Process.TFctProcess.xEnd ,
-							xError=>T_Process.TFctProcess.xError ,
-							diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	END_IF;
-END_IF;
-(******************************************************************************************************************************************)
-(****************************				         Init / Reset Hardware                                                 *****************************)
-(******************************************************************************************************************************************)
-IF xSetEnd THEN
-	xStartFunction:=FALSE;
-	xProcessError:=FALSE;
-	xInitError:=FALSE;
-	xInitStart:=FALSE;
-	xInitStop:=FALSE;
-	xSetEnd:=FALSE;
-	xTmpStart:=FALSE;
-	T_Process.xEnd:=TRUE;
-	T_Process.xStart:=FALSE;
-	T_Process.xStop:=FALSE;
-	T_Process.xError:=FALSE;
-	T_Process.diErrorNr:=0;
-	T_Process.xAbord:=FALSE;
-	T_Process.xQuitError:=FALSE;
-	T_Process.wStatus:=0;
-	T_Process.xAbord:=FALSE;
-	T_Process.xStopCycle:=FALSE;
-	T_Process.xProcessHold:=FALSE;
-	xResetRef:=TRUE;
-	FBPrcMachineReference(	xStart:=T_Process.TFctProcess.xStart ,
-							xStop:=T_Process.TFctProcess.xStop ,
-							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-							xAbord:=T_Process.TFctProcess.xAbord ,
-							T_Station:= T_Station,
-							T_Process:= T_Process,
-							xReset:= xResetRef,
-							T_ExchgParam:= T_ExchgParam,
-							xEnd=>T_Process.TFctProcess.xEnd ,
-							xError=>T_Process.TFctProcess.xError ,
-							diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	xResetAutoGeometry:=TRUE;
-	FBPrcAutoGeometry(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-						xStart:=T_Process.TFctProcess.xStart ,
-						xStop:=T_Process.TFctProcess.xStop ,
-						xStopCycle:=T_Process.TFctProcess.xStopCycle,
-						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-						xAbord:=T_Process.TFctProcess.xAbord ,
-						T_Station:= T_Station,
-						T_Process:= T_Process,
-						xReset:= xResetAutoGeometry,
-						T_ExchgParam:= T_ExchgParam,
-						T_NovRAMData:=T_NovRAMData,
-						xEnd=>T_Process.TFctProcess.xEnd ,
-						xError=>T_Process.TFctProcess.xError ,
-						diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	xResetAutoGroove:=TRUE;
-	FBPrcAutoGroove(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-						xStart:=T_Process.TFctProcess.xStart ,
-						xStop:=T_Process.TFctProcess.xStop ,
-						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-						xAbord:=T_Process.TFctProcess.xAbord ,
-						T_Station:= T_Station,
-						T_Process:= T_Process,
-						xReset:= xResetAutoGroove,
-						T_ExchgParam:= T_ExchgParam,
-						xDoNotMoveGrindPosition:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xBlockGrindFeeder,
-						xPlungeActive:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xPlungeActivationGroove,
-						T_NovRAMData:=T_NovRAMData,
-						xEnd=>T_Process.TFctProcess.xEnd ,
-						xError=>T_Process.TFctProcess.xError ,
-						diErrorNr=>T_Process.TFctProcess.diErrorNr);
-	xResetToolCalibration:=TRUE;
-	FBPrcToolCalibration(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
-						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
-						xStart:=T_Process.TFctProcess.xStart ,
-						xStop:=T_Process.TFctProcess.xStop ,
-						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
-						xAbord:=T_Process.TFctProcess.xAbord ,
-						T_Station:= T_Station,
-						T_Process:= T_Process,
-						xReset:= xResetToolCalibration,
-						T_ExchgParam:= T_ExchgParam,
-						T_NovRAMData:=T_NovRAMData,
-						xEnd=>T_Process.TFctProcess.xEnd ,
-						xError=>T_Process.TFctProcess.xError ,
-						diErrorNr=>T_Process.TFctProcess.diErrorNr);
-END_IF;
-END_FUNCTION_BLOCK
-
-
-(* @NESTEDCOMMENTS := 'Yes' *)
-(* @PATH := '\/GENERAL' *)
-(* @OBJECTFLAGS := '0, 8' *)
-(* @SYMFILEFLAGS := '2048' *)
 FUNCTION_BLOCK FB_TOOL_CALCUL
 VAR_INPUT
 	xMicroRodActive: BOOL;			(* choice of the machine MicroWire or MicroRod *)
@@ -12593,6 +12254,345 @@ IF xSetEnd THEN
 	xTmpAbord:=FALSE;
 	xSetEndPrc:=FALSE;
 	xStartProcess:=FALSE;
+END_IF;
+END_FUNCTION_BLOCK
+
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/PRG_PROCESS_LAYER4\/FB_PROCESS' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK FB_PROCESS
+VAR_INPUT
+END_VAR
+VAR_IN_OUT
+	T_Process : ST_PROCESS;				(* data structure of the processlevel *)
+	T_Station : ST_STATION;					(* data structure of the stationlevel *)
+	T_ExchgParam:ST_QVIS_EXCHG_PARAM;	(* data structure of the visualisation *)
+	T_NovRAMData:ST_DATA_RETAIN;		(* data structure of the NovRam *)
+END_VAR
+VAR_OUTPUT
+	xStatusRdy : BOOL := FALSE;				(* state of the processlevel if it is ready or not *)
+	xStatusEnd : BOOL := FALSE;				(* state of the processlevel if a process is active or not *)
+	xStatusStop : BOOL := FALSE;				(* state of the processlevel if a process will be stopped *)
+	xStatusRef : BOOL := FALSE;				(* state of the processlevel if the machine is referenced *)
+	xError : BOOL := FALSE;					(* state of the processlevel if the machine has an error *)
+	iErrorNr : DINT :=0;							(* state of the processlevel if the machine has an error, in this case it will give the errornumber *)
+	iStatusFctNr : INT := 0;						(* state of the processlevel, which process is active *)
+END_VAR
+VAR
+	xStartFunction: BOOL;
+	xSetEnd: BOOL;
+	iPrcFunctionNr: INT;
+	xProcessError: BOOL;
+	xInitError: BOOL;
+	xTmpStart: BOOL;
+	xInitStart: BOOL;
+	xInitStop: BOOL;
+	xTmpStopFunction: BOOL;
+	xDisable: BOOL;
+	xResetRef: BOOL;
+	xInitStopCycle: BOOL;
+	xTmpStopCycleFunction: BOOL;
+(* end modif test torque *)
+	FBErrorMessage : FB_ErrorMessage;
+	FBPrcMachineReference: FB_PrcMachineReference;
+	FBPrcAutoGeometry: FB_PrcAutoGeometry;
+	diTmpErrorNr: DINT;
+	xResetAutoGeometry: BOOL;
+	FBPrcAutoGroove: FB_PrcAutoGroove;
+	xResetAutoGroove: BOOL;
+	FBPrcToolCalibration: FB_PrcToolCalibration;
+	xResetToolCalibration: BOOL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(****************************************************************************************************************************************************)
+(***********                                            This Functionblock manage all the machine process                                                             ************)
+(****************************************************************************************************************************************************)
+IF NOT(T_Process.xEnable) THEN
+	T_Process.xRdy:=FALSE;
+	xDisable:=TRUE;
+	RETURN;
+ELSE
+	IF xDisable THEN
+		T_Process.xRdy:=TRUE;
+		xDisable:=FALSE;
+		xSetEnd:=TRUE;
+	END_IF;
+END_IF;
+(******************************************************************************************************************************************)
+(****************************				                  Status Part                                                            *****************************)
+(******************************************************************************************************************************************)
+xStatusRdy:=T_Process.xRdy;
+xStatusEnd:=T_Process.xEnd;
+xStatusRef:=T_Station.TControl.xReferenced;
+T_Process.xReferenced:=xStatusRef;
+xError:=T_Process.xError;
+iStatusFctNr:=iPrcFunctionNr;
+
+
+(******************************************************************************************************************************************)
+(****************************				         Error Controlling Part                                                  *****************************)
+(******************************************************************************************************************************************)
+IF xProcessError OR (T_Process.TFctProcess.xError AND T_Process.xRdy AND NOT(xSetEnd)) THEN
+	IF NOT(xInitError) THEN
+		xInitError:=TRUE;
+		xProcessError:=TRUE;
+		T_Process.TFctProcess.xQuitErr:=TRUE;
+		T_Process.xProcessHold:=FALSE;
+		diTmpErrorNr:=T_Process.TFctProcess.diErrorNr;
+	END_IF;
+	IF NOT(T_Process.TFctProcess.xQuitErr) AND T_Process.TFctProcess.xEnd AND (T_Process.diErrorNr = 0)THEN
+		FBErrorMessage(	diErrorNr:=diTmpErrorNr,
+						T_ErrorList:=T_ErrorList);
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextEnglish:=FBErrorMessage.sErrorTextEnglish;
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextDeutsch:=FBErrorMessage.sErrorTextDeutsch;
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextFrancais:=FBErrorMessage.sErrorTextFrancais;
+		T_Process.diErrorNr:=diTmpErrorNr;
+		T_Process.xError:=TRUE;
+	END_IF;
+	IF T_Process.xQuitError AND NOT(T_Process.TFctProcess.xQuitErr) THEN
+		T_Process.xProcessHold:=FALSE;
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextEnglish:='';
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextDeutsch:='';
+		T_ExchgParam.T_Visu.T_Message.sDynamicTextFrancais:='';
+		xInitError:=FALSE;
+		T_Process.xQuitError:=FALSE;
+		xSetEnd:=TRUE;
+	END_IF;
+END_IF;
+(******************************************************************************************************************************************)
+(****************************				         Main Controlling Part                                                  *****************************)
+(******************************************************************************************************************************************)
+IF (T_Process.xStart OR xTmpStart) AND T_Process.xRdy AND NOT(xSetEnd) THEN
+	IF NOT(xInitStart) THEN
+		xInitStart:=TRUE;
+		xTmpStart:=TRUE;
+		T_Process.xStop:=FALSE;
+		T_Process.xStopCycle:=FALSE;
+		T_Process.xStart:=FALSE;
+		T_Process.xEnd:=FALSE;
+		T_Process.xProcessHold:=FALSE;
+		T_Process.TFctProcess.xStart:=TRUE;
+		xStartFunction:=TRUE;
+		iPrcFunctionNr:=T_Process.iFunctNr;
+	END_IF;
+	IF T_Process.xAbord AND (T_Process.xStopCycle OR T_Process.xStop) THEN
+		T_Process.xStopCycle:=T_Process.xStop:=FALSE;		(* Prozess ist am abbrechen, diese Flag können nicht mehr berücksichtigt werden *)
+	END_IF;
+	IF T_Process.xStopCycle THEN
+		IF NOT(xInitStopCycle) THEN
+			xInitStopCycle:=TRUE;
+			T_Process.TFctProcess.xStopCycle:=TRUE;
+		END_IF;
+		IF NOT(T_Process.TFctProcess.xStopCycle) AND T_Process.TFctProcess.xProcessHold THEN
+			xInitStopCycle:=FALSE;
+			T_Process.xStopCycle:=FALSE;
+			T_Process.xProcessHold:=TRUE;
+			xTmpStopCycleFunction:=TRUE;
+		END_IF;
+		IF NOT(T_Process.TFctProcess.xStopCycle) AND NOT(T_Process.TFctProcess.xProcessHold) THEN
+			xInitStopCycle:=FALSE;
+			T_Process.xStopCycle:=FALSE;
+			T_Process.xProcessHold:=FALSE;
+			xTmpStopCycleFunction:=FALSE;
+		END_IF;
+	END_IF;
+	IF T_Process.xStop THEN
+		IF NOT(xInitStop) THEN
+			xInitStop:=TRUE;
+			T_Process.TFctProcess.xStop:=TRUE;
+		END_IF;
+		IF NOT(T_Process.TFctProcess.xStop) AND T_Process.TFctProcess.xProcessHold THEN
+			xInitStop:=FALSE;
+			T_Process.xProcessHold:=TRUE;
+			T_Process.xStop:=FALSE;
+			xTmpStopFunction:=TRUE;
+		END_IF;
+		IF NOT(T_Process.TFctProcess.xStop) AND NOT(T_Process.TFctProcess.xProcessHold) THEN
+			xInitStop:=FALSE;
+			T_Process.xStop:=FALSE;
+			T_Process.xProcessHold:=FALSE;
+			xTmpStopFunction:=FALSE;
+		END_IF;
+	END_IF;
+	IF T_Process.xStart AND (xTmpStopFunction OR xTmpStopCycleFunction) AND NOT(T_Process.xAbord) THEN
+		T_Process.xStart:=T_Process.xProcessHold:=FALSE;
+		xTmpStopFunction:=FALSE;
+		xTmpStopCycleFunction:=FALSE;
+		T_Process.TFctProcess.xStart:=TRUE;
+	END_IF;
+	IF T_Process.xAbord AND (xTmpStopFunction OR xTmpStopCycleFunction) THEN
+		T_Process.xProcessHold:=FALSE;
+		T_Process.xStart:=FALSE;
+		xTmpStopFunction:=FALSE;
+		xTmpStopCycleFunction:=FALSE;
+		T_Process.TFctProcess.xAbord:=TRUE;
+	END_IF;
+	IF NOT(T_Process.TFctProcess.xStart) AND T_Process.TFctProcess.xEnd AND NOT(xProcessError) THEN
+		xTmpStart:=FALSE;
+		xInitStart:=FALSE;
+		xSetEnd:=TRUE;
+	END_IF;
+END_IF;
+(******************************************************************************************************************************************)
+(****************************				              Funktionen                                                               *****************************)
+(******************************************************************************************************************************************)
+IF xStartFunction AND NOT(xSetEnd) THEN
+	IF (iPrcFunctionNr = 10) THEN
+	(* Process AutoGeometry *)
+		FBPrcAutoGeometry(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+							xStart:=T_Process.TFctProcess.xStart ,
+							xStop:=T_Process.TFctProcess.xStop ,
+							xStopCycle:=T_Process.TFctProcess.xStopCycle,
+							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+							xAbord:=T_Process.TFctProcess.xAbord ,
+							T_Station:= T_Station,
+							T_Process:= T_Process,
+							xReset:= xResetAutoGeometry,
+							T_ExchgParam:= T_ExchgParam,
+							T_NovRAMData:=T_NovRAMData,
+							xEnd=>T_Process.TFctProcess.xEnd ,
+							xError=>T_Process.TFctProcess.xError ,
+							diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	END_IF;
+	IF (iPrcFunctionNr = 20) THEN
+	(* Process AutoGroove *)
+		FBPrcAutoGroove(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+							xStart:=T_Process.TFctProcess.xStart ,
+							xStop:=T_Process.TFctProcess.xStop ,
+							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+							xAbord:=T_Process.TFctProcess.xAbord ,
+							T_Station:= T_Station,
+							T_Process:= T_Process,
+							xReset:= xResetAutoGroove,
+							T_ExchgParam:= T_ExchgParam,
+							xDoNotMoveGrindPosition:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xBlockGrindFeeder,
+							xPlungeActive:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xPlungeActivationGroove,
+							T_NovRAMData:=T_NovRAMData,
+							xEnd=>T_Process.TFctProcess.xEnd ,
+							xError=>T_Process.TFctProcess.xError ,
+							diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	END_IF;
+	IF (iPrcFunctionNr = 30) THEN
+	(* Process Machine Reference *)
+		FBPrcMachineReference(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+								xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+								xStart:=T_Process.TFctProcess.xStart ,
+								xStop:=T_Process.TFctProcess.xStop ,
+								xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+								xAbord:=T_Process.TFctProcess.xAbord ,
+								T_Station:= T_Station,
+								T_Process:= T_Process,
+								xReset:= xResetRef,
+								T_ExchgParam:= T_ExchgParam,
+								T_NovRAMData:=T_NovRAMData,
+								xEnd=>T_Process.TFctProcess.xEnd ,
+								xError=>T_Process.TFctProcess.xError ,
+								diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	END_IF;
+	IF (iPrcFunctionNr = 40) THEN
+	(* Process ToolCalibration *)
+		FBPrcToolCalibration(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+							xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+							xStart:=T_Process.TFctProcess.xStart ,
+							xStop:=T_Process.TFctProcess.xStop ,
+							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+							xAbord:=T_Process.TFctProcess.xAbord ,
+							T_Station:= T_Station,
+							T_Process:= T_Process,
+							xReset:= xResetAutoGeometry,
+							T_ExchgParam:= T_ExchgParam,
+							T_NovRAMData:=T_NovRAMData,
+							xEnd=>T_Process.TFctProcess.xEnd ,
+							xError=>T_Process.TFctProcess.xError ,
+							diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	END_IF;
+END_IF;
+(******************************************************************************************************************************************)
+(****************************				         Init / Reset Hardware                                                 *****************************)
+(******************************************************************************************************************************************)
+IF xSetEnd THEN
+	xStartFunction:=FALSE;
+	xProcessError:=FALSE;
+	xInitError:=FALSE;
+	xInitStart:=FALSE;
+	xInitStop:=FALSE;
+	xSetEnd:=FALSE;
+	xTmpStart:=FALSE;
+	T_Process.xEnd:=TRUE;
+	T_Process.xStart:=FALSE;
+	T_Process.xStop:=FALSE;
+	T_Process.xError:=FALSE;
+	T_Process.diErrorNr:=0;
+	T_Process.xAbord:=FALSE;
+	T_Process.xQuitError:=FALSE;
+	T_Process.wStatus:=0;
+	T_Process.xAbord:=FALSE;
+	T_Process.xStopCycle:=FALSE;
+	T_Process.xProcessHold:=FALSE;
+	xResetRef:=TRUE;
+	FBPrcMachineReference(	xStart:=T_Process.TFctProcess.xStart ,
+							xStop:=T_Process.TFctProcess.xStop ,
+							xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+							xAbord:=T_Process.TFctProcess.xAbord ,
+							T_Station:= T_Station,
+							T_Process:= T_Process,
+							xReset:= xResetRef,
+							T_ExchgParam:= T_ExchgParam,
+							xEnd=>T_Process.TFctProcess.xEnd ,
+							xError=>T_Process.TFctProcess.xError ,
+							diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	xResetAutoGeometry:=TRUE;
+	FBPrcAutoGeometry(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+						xStart:=T_Process.TFctProcess.xStart ,
+						xStop:=T_Process.TFctProcess.xStop ,
+						xStopCycle:=T_Process.TFctProcess.xStopCycle,
+						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+						xAbord:=T_Process.TFctProcess.xAbord ,
+						T_Station:= T_Station,
+						T_Process:= T_Process,
+						xReset:= xResetAutoGeometry,
+						T_ExchgParam:= T_ExchgParam,
+						T_NovRAMData:=T_NovRAMData,
+						xEnd=>T_Process.TFctProcess.xEnd ,
+						xError=>T_Process.TFctProcess.xError ,
+						diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	xResetAutoGroove:=TRUE;
+	FBPrcAutoGroove(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+						xStart:=T_Process.TFctProcess.xStart ,
+						xStop:=T_Process.TFctProcess.xStop ,
+						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+						xAbord:=T_Process.TFctProcess.xAbord ,
+						T_Station:= T_Station,
+						T_Process:= T_Process,
+						xReset:= xResetAutoGroove,
+						T_ExchgParam:= T_ExchgParam,
+						xDoNotMoveGrindPosition:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xBlockGrindFeeder,
+						xPlungeActive:=T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.xPlungeActivationGroove,
+						T_NovRAMData:=T_NovRAMData,
+						xEnd=>T_Process.TFctProcess.xEnd ,
+						xError=>T_Process.TFctProcess.xError ,
+						diErrorNr=>T_Process.TFctProcess.diErrorNr);
+	xResetToolCalibration:=TRUE;
+	FBPrcToolCalibration(	xMicroRodActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigMachineType = 2),
+						xBeckhoffDriveActive:=(T_NovRAMData.T_Standard.T_MachineConfig.iConfigAxisType = 2),
+						xStart:=T_Process.TFctProcess.xStart ,
+						xStop:=T_Process.TFctProcess.xStop ,
+						xQuitErr:=T_Process.TFctProcess.xQuitErr ,
+						xAbord:=T_Process.TFctProcess.xAbord ,
+						T_Station:= T_Station,
+						T_Process:= T_Process,
+						xReset:= xResetToolCalibration,
+						T_ExchgParam:= T_ExchgParam,
+						T_NovRAMData:=T_NovRAMData,
+						xEnd=>T_Process.TFctProcess.xEnd ,
+						xError=>T_Process.TFctProcess.xError ,
+						diErrorNr=>T_Process.TFctProcess.diErrorNr);
 END_IF;
 END_FUNCTION_BLOCK
 
