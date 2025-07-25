@@ -17982,8 +17982,8 @@ xTmp:=	(NOT(ptrTAxisToolLeft^.T_CtrleSingle.xErr) AND NOT(ptrTAxisToolLeft^.T_Ct
 		(NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xErr) AND NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xDone)) OR
 		(NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xErr) AND NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xDone)) OR
 		(NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xErr) AND NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xDone));
-CtrlEnableStation;
 CtrlDisableStation;
+CtrlEnableStation;
 
 
 
@@ -18366,6 +18366,177 @@ END_FUNCTION_BLOCK
 ACTION	CtrlDisableStation:
 (******************************************************************************************************************************************)
 (****************************				                Disable Part                                                            *****************************)
+(******************************************************************************************************************************************)
+fbFTrig(CLK:=TStation.TControl.xEnable);
+IF fbFTrig.Q THEN
+	xInitSetEnable:=FALSE;
+	xInitDelEnable:=FALSE;
+	xRdyDisableStation:=FALSE;
+END_IF;
+IF (fbFTrig.Q OR xInitDelEnable) THEN
+	IF NOT(xInitDelEnable) OR fbFTrig.Q THEN
+		xReadyChkError:=FALSE;
+		TStation.TControl.xEnd:=FALSE;
+		IF NOT(xDontDeleteErrorFlag) THEN
+			TStation.TControl.xError:=FALSE;
+		END_IF;
+		xInitDelEnable:=TRUE;
+		TStation.TControl.xRdy:=FALSE;
+		iStepEnable:=100;
+		iAxisFunctionNr:=1;
+		iStationFunctionNr:=1;
+		xInitStep:=FALSE;
+	END_IF;
+	CASE iStepEnable OF
+		100:	IF NOT(xInitStep) THEN
+				xInitStep:=TRUE;
+				xSetEnableConfig:=FALSE;
+				xStartFunction:=TRUE;
+				ptrTFunction^.xReset:=TRUE;
+			END_IF;
+			IF NOT(ptrTFunction^.xReset) AND ptrTFunction^.xEnd THEN
+				(* Alle Funktionen Resetten *)
+				IF (iStationFunctionNr < iMaxFunctionNr) THEN
+					iStationFunctionNr:=iStationFunctionNr + 1;
+					ptrTFunction^.xReset:=TRUE;
+				ELSE
+					xInitStep:=FALSE;
+					xStartFunction:=FALSE;
+					iStepEnable:=200;
+				END_IF;
+			END_IF;
+		200:	IF NOT(xInitStep) THEN
+				xInitStep:=TRUE;
+				IF TStation.TControl.xHardwareConfigError THEN
+					TStation.TControl.xHardwareConfigError:=FALSE;
+					TStation.TControl.xActiveHardware:=FALSE;
+				ELSE
+					xInitStep:=FALSE;
+					iStepEnable:=300;
+				END_IF;
+				RETURN;
+			END_IF;
+			IF NOT(TStation.TControl.xError) OR xDontDeleteErrorFlag THEN
+				TStation.TControl.xActiveHardware:=TRUE;
+				xInitStep:=FALSE;
+				iStepEnable:=300;
+				RETURN;
+			END_IF;
+		300:	IF NOT(xInitStep) THEN	(* Alle Hardware Bausteine resetten *)
+				xInitStep:=TRUE;
+				ptrTCylToolTension^.T_CtrleCyl.xFBActiv:=FALSE;
+				(*22.12.2009: KFS {    *)
+				IF xMicroRodActive THEN
+					ptrTCylToolLeftActive^.T_CtrleCyl.xFBActiv:=FALSE;
+					ptrTCylToolRightActive^.T_CtrleCyl.xFBActiv:=FALSE;
+					ptrTCylToolCenterActive^.T_CtrleCyl.xFBActiv:=FALSE;
+					ptrTCylToolPrismaLeftActive^.T_CtrleCyl.xFBActiv:=FALSE;
+					ptrTCylToolPrismaRightActive^.T_CtrleCyl.xFBActiv:=FALSE;
+					ptrTToolFeederWorkLength^.T_CtrleCyl.xFBActiv:=FALSE;
+				END_IF;
+				(*22.12.2009: KFS }   *)
+				IF xBeckhoffDriveActive THEN
+					ptrTAxisToolLeft^.T_CtrleSingle.xReset:=TRUE;
+					IF xMicroRodActive THEN
+						ptrTAxisToolCenter^.T_CtrleSingle.xReset:=TRUE;
+					END_IF;
+					ptrTAxisToolRight^.T_CtrleSingle.xReset:=TRUE;
+					ptrTAxisToolFeeder^.T_CtrleSingle.xReset:=TRUE;
+					ptrTAxisGrindFeeder^.T_CtrleSingle.xReset:=TRUE;
+					ptrTAxisGrindSpindle^.T_CtrleSingle.xReset:=TRUE;
+				ELSE
+					TStation.TControl.xResetHardware:=TRUE;
+					iStepEnable:=399;
+					RETURN;
+				END_IF;
+			END_IF;
+			IF xTmp THEN
+				RETURN;	(* Wait until all Drives finished *)
+			END_IF;
+			IF (NOT(ptrTAxisToolLeft^.T_CtrleSingle.xReset) AND ptrTAxisToolLeft^.T_CtrleSingle.xErr) OR
+			    (((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xReset) AND ptrTAxisToolCenter^.T_CtrleSingle.xErr AND xMicroRodActive) OR NOT(xMicroRodActive))) OR
+			    (NOT(ptrTAxisToolRight^.T_CtrleSingle.xReset) AND ptrTAxisToolRight^.T_CtrleSingle.xErr) OR
+			    (NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xReset) AND ptrTAxisToolFeeder^.T_CtrleSingle.xErr)OR
+			    (NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xReset) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xErr) OR
+			    (NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xReset) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xErr) THEN
+				xInitStep:=FALSE;
+				iStepEnable:=400;
+			END_IF;
+			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xReset) AND ptrTAxisToolLeft^.T_CtrleSingle.xDone AND
+			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xReset) AND ptrTAxisToolCenter^.T_CtrleSingle.xDone AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
+			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xReset) AND ptrTAxisToolRight^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xReset) AND ptrTAxisToolFeeder^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xReset) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xReset) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xDone THEN
+				TStation.TControl.xActiveHardware:=FALSE;
+				xInitStep:=FALSE;
+				xInitDelEnable:=FALSE;
+				xSetEnd:=TRUE;
+				xRdyDisableStation:=TRUE;
+			END_IF;
+		399:	IF NOT(TStation.TControl.xResetHardware) THEN
+				TStation.TControl.xActiveHardware:=FALSE;
+				xInitStep:=FALSE;
+				xInitDelEnable:=FALSE;
+				xSetEnd:=TRUE;
+				xRdyDisableStation:=TRUE;
+			END_IF;
+		400:	IF NOT(xInitStep) THEN
+				xInitStep:=TRUE;
+				ptrTAxisToolLeft^.T_CtrleSingle.iFunction:=1;
+				ptrTAxisToolLeft^.T_CtrleSingle.xExecute:=ptrTAxisToolLeft^.T_CtrleSingle.xErr;
+				IF xMicroRodActive THEN
+					ptrTAxisToolCenter^.T_CtrleSingle.iFunction:=1;
+					ptrTAxisToolCenter^.T_CtrleSingle.xExecute:=ptrTAxisToolCenter^.T_CtrleSingle.xErr;
+				END_IF;
+				ptrTAxisToolRight^.T_CtrleSingle.iFunction:=1;
+				ptrTAxisToolRight^.T_CtrleSingle.xExecute:=ptrTAxisToolRight^.T_CtrleSingle.xErr;
+				ptrTAxisToolFeeder^.T_CtrleSingle.iFunction:=1;
+				ptrTAxisToolFeeder^.T_CtrleSingle.xExecute:=ptrTAxisToolFeeder^.T_CtrleSingle.xErr;
+				ptrTAxisGrindFeeder^.T_CtrleSingle.iFunction:=1;
+				ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute:=ptrTAxisGrindFeeder^.T_CtrleSingle.xErr;
+				ptrTAxisGrindSpindle^.T_CtrleSingle.iFunction:=1;
+				ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute:=ptrTAxisGrindSpindle^.T_CtrleSingle.xErr;
+			END_IF;
+			IF xTmp THEN
+				RETURN;	(* Wait until all Drives finished *)
+			END_IF;
+			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xExecute) AND ptrTAxisToolLeft^.T_CtrleSingle.xErr AND
+			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xExecute) AND ptrTAxisToolCenter^.T_CtrleSingle.xErr AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
+			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xExecute) AND ptrTAxisToolRight^.T_CtrleSingle.xErr AND
+			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisToolFeeder^.T_CtrleSingle.xErr AND
+			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xErr AND
+			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xErr THEN
+				xInitStep:=FALSE;
+				iStepEnable:=500;
+			END_IF;
+			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xExecute) AND ptrTAxisToolLeft^.T_CtrleSingle.xDone AND
+			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xExecute) AND ptrTAxisToolCenter^.T_CtrleSingle.xDone AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
+			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xExecute) AND ptrTAxisToolRight^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisToolFeeder^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xDone AND
+			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xDone THEN
+				TStation.TControl.xActiveHardware:=FALSE;
+				xInitStep:=FALSE;
+				xInitDelEnable:=FALSE;
+				xSetEnd:=TRUE;
+				xRdyDisableStation:=TRUE;
+			END_IF;
+		500:	TStation.TControl.xActiveHardware:=FALSE;
+			TStation.TControl.diErrorNr:=8000000 + 10;	(* Station Disable Fehlerhaft *)
+			TStation.TControl.xError:=TRUE;
+			xDontDeleteErrorFlag:=TRUE;
+			xInitStep:=FALSE;
+			xInitDelEnable:=FALSE;
+			xSetEnd:=TRUE;
+			xRdyDisableStation:=TRUE;
+	END_CASE;
+END_IF;
+END_ACTION
+
+ACTION	CtrlEnableStation:
+(******************************************************************************************************************************************)
+(****************************				                Enable Part                                                            *****************************)
 (******************************************************************************************************************************************)
 fbRTrig(CLK:=TStation.TControl.xEnable);
 IF fbRTrig.Q THEN
@@ -18904,177 +19075,6 @@ IF (fbRTrig.Q OR xInitSetEnable) THEN
 			xInitSetEnable:=FALSE;
 			TStation.TControl.xRdy:=TRUE;
 			xSetEnd:=TRUE;
-	END_CASE;
-END_IF;
-END_ACTION
-
-ACTION	CtrlEnableStation:
-(******************************************************************************************************************************************)
-(****************************				                Enable Part                                                            *****************************)
-(******************************************************************************************************************************************)
-fbFTrig(CLK:=TStation.TControl.xEnable);
-IF fbFTrig.Q THEN
-	xInitSetEnable:=FALSE;
-	xInitDelEnable:=FALSE;
-	xRdyDisableStation:=FALSE;
-END_IF;
-IF (fbFTrig.Q OR xInitDelEnable) THEN
-	IF NOT(xInitDelEnable) OR fbFTrig.Q THEN
-		xReadyChkError:=FALSE;
-		TStation.TControl.xEnd:=FALSE;
-		IF NOT(xDontDeleteErrorFlag) THEN
-			TStation.TControl.xError:=FALSE;
-		END_IF;
-		xInitDelEnable:=TRUE;
-		TStation.TControl.xRdy:=FALSE;
-		iStepEnable:=100;
-		iAxisFunctionNr:=1;
-		iStationFunctionNr:=1;
-		xInitStep:=FALSE;
-	END_IF;
-	CASE iStepEnable OF
-		100:	IF NOT(xInitStep) THEN
-				xInitStep:=TRUE;
-				xSetEnableConfig:=FALSE;
-				xStartFunction:=TRUE;
-				ptrTFunction^.xReset:=TRUE;
-			END_IF;
-			IF NOT(ptrTFunction^.xReset) AND ptrTFunction^.xEnd THEN
-				(* Alle Funktionen Resetten *)
-				IF (iStationFunctionNr < iMaxFunctionNr) THEN
-					iStationFunctionNr:=iStationFunctionNr + 1;
-					ptrTFunction^.xReset:=TRUE;
-				ELSE
-					xInitStep:=FALSE;
-					xStartFunction:=FALSE;
-					iStepEnable:=200;
-				END_IF;
-			END_IF;
-		200:	IF NOT(xInitStep) THEN
-				xInitStep:=TRUE;
-				IF TStation.TControl.xHardwareConfigError THEN
-					TStation.TControl.xHardwareConfigError:=FALSE;
-					TStation.TControl.xActiveHardware:=FALSE;
-				ELSE
-					xInitStep:=FALSE;
-					iStepEnable:=300;
-				END_IF;
-				RETURN;
-			END_IF;
-			IF NOT(TStation.TControl.xError) OR xDontDeleteErrorFlag THEN
-				TStation.TControl.xActiveHardware:=TRUE;
-				xInitStep:=FALSE;
-				iStepEnable:=300;
-				RETURN;
-			END_IF;
-		300:	IF NOT(xInitStep) THEN	(* Alle Hardware Bausteine resetten *)
-				xInitStep:=TRUE;
-				ptrTCylToolTension^.T_CtrleCyl.xFBActiv:=FALSE;
-				(*22.12.2009: KFS {    *)
-				IF xMicroRodActive THEN
-					ptrTCylToolLeftActive^.T_CtrleCyl.xFBActiv:=FALSE;
-					ptrTCylToolRightActive^.T_CtrleCyl.xFBActiv:=FALSE;
-					ptrTCylToolCenterActive^.T_CtrleCyl.xFBActiv:=FALSE;
-					ptrTCylToolPrismaLeftActive^.T_CtrleCyl.xFBActiv:=FALSE;
-					ptrTCylToolPrismaRightActive^.T_CtrleCyl.xFBActiv:=FALSE;
-					ptrTToolFeederWorkLength^.T_CtrleCyl.xFBActiv:=FALSE;
-				END_IF;
-				(*22.12.2009: KFS }   *)
-				IF xBeckhoffDriveActive THEN
-					ptrTAxisToolLeft^.T_CtrleSingle.xReset:=TRUE;
-					IF xMicroRodActive THEN
-						ptrTAxisToolCenter^.T_CtrleSingle.xReset:=TRUE;
-					END_IF;
-					ptrTAxisToolRight^.T_CtrleSingle.xReset:=TRUE;
-					ptrTAxisToolFeeder^.T_CtrleSingle.xReset:=TRUE;
-					ptrTAxisGrindFeeder^.T_CtrleSingle.xReset:=TRUE;
-					ptrTAxisGrindSpindle^.T_CtrleSingle.xReset:=TRUE;
-				ELSE
-					TStation.TControl.xResetHardware:=TRUE;
-					iStepEnable:=399;
-					RETURN;
-				END_IF;
-			END_IF;
-			IF xTmp THEN
-				RETURN;	(* Wait until all Drives finished *)
-			END_IF;
-			IF (NOT(ptrTAxisToolLeft^.T_CtrleSingle.xReset) AND ptrTAxisToolLeft^.T_CtrleSingle.xErr) OR
-			    (((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xReset) AND ptrTAxisToolCenter^.T_CtrleSingle.xErr AND xMicroRodActive) OR NOT(xMicroRodActive))) OR
-			    (NOT(ptrTAxisToolRight^.T_CtrleSingle.xReset) AND ptrTAxisToolRight^.T_CtrleSingle.xErr) OR
-			    (NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xReset) AND ptrTAxisToolFeeder^.T_CtrleSingle.xErr)OR
-			    (NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xReset) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xErr) OR
-			    (NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xReset) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xErr) THEN
-				xInitStep:=FALSE;
-				iStepEnable:=400;
-			END_IF;
-			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xReset) AND ptrTAxisToolLeft^.T_CtrleSingle.xDone AND
-			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xReset) AND ptrTAxisToolCenter^.T_CtrleSingle.xDone AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
-			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xReset) AND ptrTAxisToolRight^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xReset) AND ptrTAxisToolFeeder^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xReset) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xReset) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xDone THEN
-				TStation.TControl.xActiveHardware:=FALSE;
-				xInitStep:=FALSE;
-				xInitDelEnable:=FALSE;
-				xSetEnd:=TRUE;
-				xRdyDisableStation:=TRUE;
-			END_IF;
-		399:	IF NOT(TStation.TControl.xResetHardware) THEN
-				TStation.TControl.xActiveHardware:=FALSE;
-				xInitStep:=FALSE;
-				xInitDelEnable:=FALSE;
-				xSetEnd:=TRUE;
-				xRdyDisableStation:=TRUE;
-			END_IF;
-		400:	IF NOT(xInitStep) THEN
-				xInitStep:=TRUE;
-				ptrTAxisToolLeft^.T_CtrleSingle.iFunction:=1;
-				ptrTAxisToolLeft^.T_CtrleSingle.xExecute:=ptrTAxisToolLeft^.T_CtrleSingle.xErr;
-				IF xMicroRodActive THEN
-					ptrTAxisToolCenter^.T_CtrleSingle.iFunction:=1;
-					ptrTAxisToolCenter^.T_CtrleSingle.xExecute:=ptrTAxisToolCenter^.T_CtrleSingle.xErr;
-				END_IF;
-				ptrTAxisToolRight^.T_CtrleSingle.iFunction:=1;
-				ptrTAxisToolRight^.T_CtrleSingle.xExecute:=ptrTAxisToolRight^.T_CtrleSingle.xErr;
-				ptrTAxisToolFeeder^.T_CtrleSingle.iFunction:=1;
-				ptrTAxisToolFeeder^.T_CtrleSingle.xExecute:=ptrTAxisToolFeeder^.T_CtrleSingle.xErr;
-				ptrTAxisGrindFeeder^.T_CtrleSingle.iFunction:=1;
-				ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute:=ptrTAxisGrindFeeder^.T_CtrleSingle.xErr;
-				ptrTAxisGrindSpindle^.T_CtrleSingle.iFunction:=1;
-				ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute:=ptrTAxisGrindSpindle^.T_CtrleSingle.xErr;
-			END_IF;
-			IF xTmp THEN
-				RETURN;	(* Wait until all Drives finished *)
-			END_IF;
-			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xExecute) AND ptrTAxisToolLeft^.T_CtrleSingle.xErr AND
-			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xExecute) AND ptrTAxisToolCenter^.T_CtrleSingle.xErr AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
-			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xExecute) AND ptrTAxisToolRight^.T_CtrleSingle.xErr AND
-			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisToolFeeder^.T_CtrleSingle.xErr AND
-			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xErr AND
-			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xErr THEN
-				xInitStep:=FALSE;
-				iStepEnable:=500;
-			END_IF;
-			IF NOT(ptrTAxisToolLeft^.T_CtrleSingle.xExecute) AND ptrTAxisToolLeft^.T_CtrleSingle.xDone AND
-			    ((NOT(ptrTAxisToolCenter^.T_CtrleSingle.xExecute) AND ptrTAxisToolCenter^.T_CtrleSingle.xDone AND xMicroRodActive) OR NOT(xMicroRodActive)) AND
-			    NOT(ptrTAxisToolRight^.T_CtrleSingle.xExecute) AND ptrTAxisToolRight^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisToolFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisToolFeeder^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisGrindFeeder^.T_CtrleSingle.xExecute) AND ptrTAxisGrindFeeder^.T_CtrleSingle.xDone AND
-			    NOT(ptrTAxisGrindSpindle^.T_CtrleSingle.xExecute) AND ptrTAxisGrindSpindle^.T_CtrleSingle.xDone THEN
-				TStation.TControl.xActiveHardware:=FALSE;
-				xInitStep:=FALSE;
-				xInitDelEnable:=FALSE;
-				xSetEnd:=TRUE;
-				xRdyDisableStation:=TRUE;
-			END_IF;
-		500:	TStation.TControl.xActiveHardware:=FALSE;
-			TStation.TControl.diErrorNr:=8000000 + 10;	(* Station Disable Fehlerhaft *)
-			TStation.TControl.xError:=TRUE;
-			xDontDeleteErrorFlag:=TRUE;
-			xInitStep:=FALSE;
-			xInitDelEnable:=FALSE;
-			xSetEnd:=TRUE;
-			xRdyDisableStation:=TRUE;
 	END_CASE;
 END_IF;
 END_ACTION
