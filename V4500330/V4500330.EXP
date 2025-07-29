@@ -17628,6 +17628,9 @@ IF xStartMainPrc AND NOT(xSetEnd) AND NOT(xHardwareError) THEN
 				IF (rToolFeedLength = 0) THEN
 				(* Stop ToolFeeder Movement *)
 					IF xMicroRodActive THEN
+						(* All rotation axis stop since they are the slave of the left axis*)
+						TAxisToolLeft.T_CtrleSingle.iFunction:=5;
+						TAxisToolLeft.T_CtrleSingle.xExecute:=TRUE;
 						IF TAxisToolFeeder.T_CtrleSingle.xSlave THEN
 							IF (T_WorkTool.rToolRotationSpeed > 0) THEN
 								TAxisToolFeeder.T_CtrleSingle.lrGearFactor:=INT_TO_LREAL(T_WorkTool.iBaseGearDivider) * -1.0;
@@ -17670,6 +17673,9 @@ IF xStartMainPrc AND NOT(xSetEnd) AND NOT(xHardwareError) THEN
 				xInitStep:=TRUE;
 				xCheckToolFeedPosition:=FALSE;
 				IF xMicroRodActive THEN
+					(* All rotation axis stop since they are the slave of the left axis*)
+					TAxisToolLeft.T_CtrleSingle.iFunction:=5;
+					TAxisToolLeft.T_CtrleSingle.xExecute:=TRUE;
 					IF TAxisToolFeeder.T_CtrleSingle.xSlave THEN
 						IF (T_WorkTool.rToolRotationSpeed > 0) THEN
 							TAxisToolFeeder.T_CtrleSingle.lrGearFactor:=INT_TO_LREAL(T_WorkTool.iBaseGearDivider) * -1.0;
