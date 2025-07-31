@@ -7991,6 +7991,8 @@ VAR
 	TONWaitReset: TON;
 	rMaxWorkLength:REAL:=27;	 (* 0mm - 270mm = 0V - 10V  --> 270mm  --> Eingabe in cm! *)
 	rMeasureWorkLengthCorrection:REAL:=0.4; (*Rundungs-Korrektur in cm*)
+
+	rToolCircumference : REAL; (*BEF*)
 END_VAR
 (* @END_DECLARATION := '0' *)
 (****************************************************************************************************************************************************)
@@ -8328,6 +8330,10 @@ FBTiltSensorGrindSpindle(	IiATiltSensor:=IiATiltSensorGrindingSpindle,
 						rMin90DegV:=0.5);
 
 TStation.THardware.TAxisGrindSpindle.T_LiveValue.lrActualPosition:=FBTiltSensorGrindSpindle.rActualDegree;
+
+(* Calculation of target tilt angle of spindle head*)
+rToolCircumference:=crPi*(T_ExchgParam.T_InfoValueCommon.rToolDiameter/1000.0); (* Conversion from um to mm*)
+grTiltAngleGrindSpindleTarget := 90.0 - (ATAN((T_Station.T_WorkTool.rPitch*-1.0) / rToolCircumference) / (2.0 * crPi)) * 360.0;
 
 END_ACTION
 
@@ -35183,6 +35189,7 @@ END_TYPE
 VAR_GLOBAL CONSTANT
 	(* developpement *)
 	(*sRootPLC:STRING(255):='C:';*)
+	crPi:REAL:=3.14159265;
 	(* machine *)
 	cssRootPLC:STRING(255):='';
 	(* HDD *)
@@ -35218,6 +35225,8 @@ VAR_GLOBAL
 	T_DeviceID:ST_DEVICEID;
 	T_BoxID:ST_BOXID;
 	 T_AxisNodeState AT %I* :ST_NODESTATE;
+
+	grTiltAngleGrindSpindleTarget:REAL; (*BEF*)
 (* Visualization *)
 	QVisCtrl :ST_QVISCTRLE;(*~	(QVis) (InOut:2)	~*)
 	T_ExchgParam :ST_QVIS_EXCHG_PARAM;(*~	(QVis) (InOut:2)	~*)
