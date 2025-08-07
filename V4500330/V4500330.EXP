@@ -5533,6 +5533,12 @@ END_VAR
 		T_NovRam.T_Ctrle.udiSrcLen:=SIZEOF(T_NovRam.T_Data);
 		T_NovRam.T_Ctrle.udipDestAddr:=ADR(T_NovRam.T_Data);
 		T_NovRam.T_Ctrle.udiDestLen:=SIZEOF(T_NovRam.T_Data);
+		IF gxSimuHW THEN
+			T_NovRam.T_Ctrle.xDone:=TRUE;
+			T_NovRam.T_Ctrle.xErr:=FALSE;
+			T_NovRam.T_Ctrle.udiErrorID:=0;
+			RETURN;
+		END_IF;
 		CASE T_NovRam.T_Ctrle.iFunction OF
 		(* Read *)
 		1:	xRead:=TRUE;
@@ -8333,7 +8339,10 @@ TStation.THardware.TAxisGrindSpindle.T_LiveValue.lrActualPosition:=FBTiltSensorG
 
 (* Calculation of target tilt angle of spindle head*)
 rToolCircumference:=crPi*(T_ExchgParam.T_InfoValueCommon.rToolDiameter/1000.0); (* Conversion from um to mm*)
-grTiltAngleGrindSpindleTarget := 90.0 - (ATAN((T_Station.T_WorkTool.rPitch*-1.0) / rToolCircumference) / (2.0 * crPi)) * 360.0;
+IF rToolCircumference > 0 THEN (* Avoid div 0 *)
+	T_ExchgParam.T_StationCommon.rGrindSpindleTiltAngleTarget := 90.0 - (ATAN(T_NovRAM.T_Data.T_ProcessImageData.T_AutoGroovePara.rPitchGroove / rToolCircumference) / (2.0 * crPi)) * 360.0;
+END_IF
+
 
 END_ACTION
 
@@ -31599,6 +31608,10 @@ VAR
 	xReadHardware: BOOL;
 	xTmp1: BOOL;
 	xCheckConfirm: BOOL;
+	T_TwinSafeInWithoutHW: ST_TWINSAFE_IN;							(*Local struct to force safe inputs during runtime*)
+	ptrTwinSafeInWithoutHW:POINTER TO	ST_TWINSAFE_IN;			(*HW to Safety input signal*)
+	ptrTwinSafeOutWithoutHW:	POINTER TO ST_TWINSAFE_OUT;			(*Safety to HW Output signal*)
+	xFirstExecute: BOOL;
 (* variable *)
 (* Execute *)
 	xSetOutputDisable:BOOL;
@@ -31642,6 +31655,36 @@ END_VAR
 (**********      This Functionblock manage the booting of the machine and the security mangament of the machine during   ********)
 (**********       the machine operating                           														    ************)
 (****************************************************************************************************************************************************)
+IF gxSimuHW AND NOT xFirstExecute THEN
+	xFirstExecute:=TRUE;
+	ptrTwinSafeOutWithoutHW:=ADR(T_TwinSafeOut);
+	ptrTwinSafeOutWithoutHW^.QxEmergencyStopStuder:=TRUE;
+	ptrTwinSafeOutWithoutHW^.QxAirSupply:=TRUE;
+	ptrTwinSafeOutWithoutHW^.QxContactor_K3:=TRUE;
+	ptrTwinSafeOutWithoutHW^.QxContactor_K4:=TRUE;
+	ptrTwinSafeOutWithoutHW^.QxGrindingSpindleSTO:=TRUE;
+	ptrTwinSafeOutWithoutHW^.QxCoolantPumpExt:=TRUE;
+
+	(*prepare forcing output if needed*)
+	T_TwinSafeInWithoutHW.IxReadyToolLeft:=TRUE;
+	T_TwinSafeInWithoutHW.IxReadyToolCenter:=TRUE;
+	T_TwinSafeInWithoutHW.IxReadyToolRight:=TRUE;
+	T_TwinSafeInWithoutHW.IxReadyToolFeeder:=TRUE;
+	T_TwinSafeInWithoutHW.IxReadyGrindFeeder:=TRUE;
+	T_TwinSafeInWithoutHW.IxRealseButton:=TRUE;
+	T_TwinSafeInWithoutHW.IxEmergencyStopStuder:=TRUE;
+	T_TwinSafeInWithoutHW.IxEmergencyStopMachine:=TRUE;
+	T_TwinSafeInWithoutHW.IxPowerSupplyEcoStep:=TRUE;
+	T_TwinSafeInWithoutHW.IxContactorAuxContact:=FALSE;
+
+	T_NovRam.T_Data.T_Standard.T_MachineConfig.iConfigMachineType := 2;
+END_IF;
+
+IF gxSimuHW AND xForceSafeInWithoutHW THEN
+	ptrTwinSafeInWithoutHW:=ADR(T_TwinSafeIn);
+	ptrTwinSafeInWithoutHW^:=T_TwinSafeInWithoutHW;
+END_IF
+
 (* First execution of the start up *)
 IF NOT(xFirstExecution) THEN
 	(* Init. Startup structure *)
@@ -31680,7 +31723,7 @@ END_IF
 (***********                                start of the check for the emergeny button, air and axis communication error                              ************)
 (****************************************************************************************************************************************************)
 (* check the emergency stop and the air pressure after booting the machine *)
-	IF NOT(xStartCheck) THEN
+	IF NOT(xStartCheck)  AND NOT(gxSimuHW) THEN
 	(* check emergency stop, only if it is not already in this state *)
 		IF NOT(xStartBooting AND ((iStepFunction = 1) OR (iStepFunction = 10))) THEN
 			IF NOT(T_TwinSafeIn.IxEmergencyStopMachine) OR NOT(T_TwinSafeIn.IxEmergencyStopStuder) THEN
@@ -32292,7 +32335,11 @@ END_IF
 			IF xTmp THEN  iStepFunction:=20; END_IF
 		(* Init. device name *)
 		20:	(* PLC name *)
-			T_DeviceID.T_CX1020.sDeviceName:='CX1000_PLC';
+			IF gxSimuHW THEN
+				T_DeviceID.T_CX1020.sDeviceName:='';
+			ELSE
+				T_DeviceID.T_CX1020.sDeviceName:='CX1000_PLC';
+			END_IF
 			(* feldbus name *)
 			T_DeviceID.T_CANOpenMaster.sDeviceName:='CANOpenMaster';
 			T_DeviceID.T_CANOpenMaster.xDeviceOption:=TRUE;
@@ -32328,7 +32375,11 @@ END_IF
 			END_IF;
 		(* end function or time out *)
 		70:	IF T_VisuQVis.T_CtrleVisu.xDone THEN
-				T_VisuQVis.ptrT_ExchgParam^.T_Config.xNoTouchScreenBtPanel:=TRUE;
+				IF gxSimuHW THEN
+					T_VisuQVis.ptrT_ExchgParam^.T_Config.xNoTouchScreenBtPanel:=FALSE;
+				ELSE
+					T_VisuQVis.ptrT_ExchgParam^.T_Config.xNoTouchScreenBtPanel:=TRUE;
+				END_IF
 				T_StartUp.T_Ctrle.xDone:=TRUE;
 				T_StartUp.T_Ctrle.xErr:=FALSE;
 				T_StartUp.T_Ctrle.udiErrorID:=0;
@@ -32354,7 +32405,7 @@ END_IF
 			QarxDigitalOutput[1]:=FALSE;	(* QxCtrlLampStartButton *)
 			QarxDigitalOutput[2]:=FALSE;	(* QxCtrlLampStopButton *)
 			QarxDigitalOutput[3]:=FALSE;	(* QxCtrlLampReleaseButton *)
-			IF NOT(T_TwinSafeIn.IxEmergencyStopMachine) OR NOT(T_TwinSafeIn.IxEmergencyStopStuder) THEN		(* check state of emergency button *)
+			IF (NOT(T_TwinSafeIn.IxEmergencyStopMachine) OR NOT(T_TwinSafeIn.IxEmergencyStopStuder)) AND NOT(gxSimuHW)THEN		(* check state of emergency button *)
 				(* Overlay Message Error *)
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.bStateMessageError:=1;
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.bStateMessageInfo:=0;
@@ -32433,7 +32484,7 @@ END_IF
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.iStateStartPage:=4;	(* Message: Release AxesCurrentButton *)
 				RETURN;	(* Do nothing if the Button AxesCurrent is Active *)
 			END_IF;
-			IF RisingEdgeQuitButton.Q THEN		(* Wait until the Operator press the external quit button *)
+			IF RisingEdgeQuitButton.Q OR gxSimuHW THEN		(* Wait until the Operator press the external quit button *)
 				QarxDigitalOutput[3]:=FALSE;	(* QxCtrlLampReleaseButton *)
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.iStateStartPage:=0;	(* No Text *)
 				xDeleteErrorMessage:=TRUE;	(* Reset the line message error *)
@@ -32514,7 +32565,7 @@ END_IF
 				iStepFunction:=90;
 			END_IF;
 			xCheckSecurityDoor:=TRUE;
-		90:	IF NOT(IarxDigitalInput[4]) THEN		(* check state of air pressure *)
+		90:	IF NOT(IarxDigitalInput[4]) AND NOT(gxSimuHW) THEN		(* check state of air pressure *)
 				xCheckSecurityDoor:=FALSE;
 				T_TwinSafeCtrleOUT.xTwinSAFE_Run:=FALSE;	(* Stop TwinSafe Groupe *)
 				(* Overlay Message Error *)
@@ -32554,7 +32605,7 @@ END_IF
 			iStepFunction:=120;
 		120:	QarxDigitalOutput[1]:=TRUE;	(* QxCtrlLampStartButton *)
 			T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.iStateStartPage:=2;	(* Press external start button *)
-			IF RisingEdgeStartButton.Q THEN		(* Wait until the Operator press the external start button *)
+			IF RisingEdgeStartButton.Q OR gxSimuHW THEN		(* Wait until the Operator press the external start button *)
 				QarxDigitalOutput[1]:=FALSE;	(* QxCtrlLampStartButton *)
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.iStateStartPage:=0;
 				xDeleteErrorMessage:=TRUE;	(* Reset the line message error *)
@@ -32566,7 +32617,7 @@ END_IF
 				iStepFunction:=60;
 				RETURN;
 			END_IF;
-		130:	IF IarxDigitalInput[3] THEN	(* Check if the key switch is active *)
+		130:	IF IarxDigitalInput[3] AND NOT(gxSimuHW)THEN	(* Check if the key switch is active *)
 				(* Overlay Message Error *)
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.bStateMessageError:=1;
 				T_VisuQVis.ptrT_ExchgParam^.T_SafetyCtrl.bStateMessageInfo:=0;
@@ -32680,7 +32731,11 @@ END_IF
 			iStepFunction:=200;
 		200:	T_Station.TControl.xEnable:=TRUE;
 			iStepFunction:=300;
-		300:	IF T_Station.TControl.xEnd AND T_Station.TControl.xError THEN
+		300: IF  gxSimuHW THEN
+				iStepFunction:=330;
+				RETURN;
+			END_IF;
+			IF T_Station.TControl.xEnd AND T_Station.TControl.xError THEN
 				FBErrorMessage(	diErrorNr:=T_Station.TControl.diErrorNr,
 								T_ErrorList:=T_ErrorList);
 				T_VisuQVis.ptrT_ExchgParam^.T_Visu.T_Message.sDynamicTextEnglish:=FBErrorMessage.sErrorTextEnglish;
@@ -34642,6 +34697,7 @@ STRUCT
 	rNewGrindSpindleSpeed:REAL;		(* IGS *)
 	iGrindSpindleLoad:INT;			(* IGS *)
 	rGrindSpindleTiltSensor:REAL;		(* IGS *)
+	rGrindSpindleTiltAngleTarget:REAL; 	(*BEF*)
 	xGrindSpindleProtection:BOOL;		(* IGS TODO *)
 	xGrindSpindleCW:BOOL;			(* IGS *)
 
@@ -35225,8 +35281,6 @@ VAR_GLOBAL
 	T_DeviceID:ST_DEVICEID;
 	T_BoxID:ST_BOXID;
 	 T_AxisNodeState AT %I* :ST_NODESTATE;
-
-	grTiltAngleGrindSpindleTarget:REAL; (*BEF*)
 (* Visualization *)
 	QVisCtrl :ST_QVISCTRLE;(*~	(QVis) (InOut:2)	~*)
 	T_ExchgParam :ST_QVIS_EXCHG_PARAM;(*~	(QVis) (InOut:2)	~*)
@@ -35276,6 +35330,10 @@ VAR_GLOBAL
 	T_TwinSafeIn:ST_TWINSAFE_IN;
 	T_TwinSafeOut AT %I*:ST_TWINSAFE_OUT;
 	QxTwinSafeCoolantPumpExt AT %Q*:BOOL;			(* IGS *)
+
+(*Simulationsvariablen*)
+	gxSimuHW: BOOL:=FALSE;							(*Hardware-Simulation bei Ofline Test*)
+	xForceSafeInWithoutHW: BOOL:= FALSE; 				(*Use this variable to force the Safe HW Inputs with T_TwinSafeInWithoutHW during runtime *)
 END_VAR
 (* @OBJECT_END := 'Globale_Variablen' *)
 (* @CONNECTIONS := Globale_Variablen
