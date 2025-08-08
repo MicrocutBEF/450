@@ -8340,7 +8340,7 @@ TStation.THardware.TAxisGrindSpindle.T_LiveValue.lrActualPosition:=FBTiltSensorG
 (* Calculation of target tilt angle of spindle head*)
 rToolCircumference:=crPi*(T_ExchgParam.T_InfoValueCommon.rToolDiameter/1000.0); (* Conversion from um to mm*)
 IF rToolCircumference > 0 THEN (* Avoid div 0 *)
-	T_ExchgParam.T_StationCommon.rGrindSpindleTiltAngleTarget := 90.0 - (ATAN(T_NovRAM.T_Data.T_ProcessImageData.T_AutoGroovePara.rPitchGroove / rToolCircumference) / (2.0 * crPi)) * 360.0;
+	T_ExchgParam.T_StationCommon.rGrindSpindleTiltAngleTarget:=90.0 - (ATAN(T_NovRAM.T_Data.T_ProcessImageData.T_AutoGroovePara.rPitchGroove / rToolCircumference) / (2.0 * crPi)) * 360.0;
 END_IF
 
 
@@ -19860,6 +19860,7 @@ END_VAR
 	IF T_Data_ProcessImageLoadData.T_AutoGroovePara.xBlockGrindFeeder <> T_Data_ProcessImageData.T_AutoGroovePara.xBlockGrindFeeder THEN xProcessValueModified:=TRUE; RETURN; END_IF
 	IF T_Data_ProcessImageLoadData.T_AutoGroovePara.iNumberOfGrooves <> T_Data_ProcessImageData.T_AutoGroovePara.iNumberOfGrooves THEN xProcessValueModified:=TRUE; RETURN; END_IF
 	IF T_Data_ProcessImageLoadData.T_AutoGroovePara.iSpeedGrindSpindle <> T_Data_ProcessImageData.T_AutoGroovePara.iSpeedGrindSpindle THEN xProcessValueModified:=TRUE; RETURN; END_IF
+	IF T_Data_ProcessImageLoadData.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance <> T_Data_ProcessImageData.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance THEN xProcessValueModified:=TRUE; RETURN; END_IF
 
 	IF T_Data_ProcessImageLoadData.T_CalibrationPara.rDisplaceLengthToolFeedCalib <> T_Data_ProcessImageData.T_CalibrationPara.rDisplaceLengthToolFeedCalib THEN xProcessValueModified:=TRUE; RETURN; END_IF
 	IF T_Data_ProcessImageLoadData.T_CalibrationPara.rDisplaceSpeedGrindFeedCalib <> T_Data_ProcessImageData.T_CalibrationPara.rDisplaceSpeedGrindFeedCalib THEN xProcessValueModified:=TRUE; RETURN; END_IF
@@ -30971,6 +30972,7 @@ END_VAR
 				IF sVariableName = 'rspeedtoolrotationgroove' THEN ptrData_ProcessImageLoadData^.T_AutoGroovePara.rSpeedToolRotationGroove:=STRING_TO_REAL(sValue); END_IF;
 				IF sVariableName = 'inumberofgrooves' THEN ptrData_ProcessImageLoadData^.T_AutoGroovePara.iNumberOfGrooves:=STRING_TO_INT(sValue); END_IF;
 				IF sVariableName = 'ispeedgrindspindle' THEN ptrData_ProcessImageLoadData^.T_AutoGroovePara.iSpeedGrindSpindle:=STRING_TO_INT(sValue); END_IF;
+				IF sVariableName = 'rgrindspindletiltangletolerance' THEN ptrData_ProcessImageLoadData^.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance:=STRING_TO_REAL(sValue); END_IF;
 				IF sVariableName = 'rdisplaceactivationgroove' THEN
 					IF (STRING_TO_REAL(sValue) = 0) THEN
 						ptrData_ProcessImageLoadData^.T_AutoGroovePara.xDisplaceActivationGroove:=FALSE;
@@ -31290,6 +31292,8 @@ END_VAR
 	ptrDataFile^[i]:=CONCAT(sTmp,';');i:=i+1;
 
 	sTmp:=CONCAT('79:iSpeedGrindSpindle:=',INT_TO_STRING(ptrData_ProcessImageData^.T_AutoGroovePara.iSpeedGrindSpindle));
+	ptrDataFile^[i]:=CONCAT(sTmp,';');i:=i+1;
+	sTmp:=CONCAT('80:rGrindSpindleTiltAngleTolerance:=',REAL_TO_STRING(ptrData_ProcessImageData^.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance));
 	ptrDataFile^[i]:=CONCAT(sTmp,';');i:=i+1;
 
 	(* add empty line to set the end *)
@@ -31680,7 +31684,7 @@ IF gxSimuHW AND NOT xFirstExecute THEN
 	T_NovRam.T_Data.T_Standard.T_MachineConfig.iConfigMachineType := 2;
 END_IF;
 
-IF gxSimuHW AND xForceSafeInWithoutHW THEN
+IF gxSimuHW AND gxForceSafeInWithoutHW THEN
 	ptrTwinSafeInWithoutHW:=ADR(T_TwinSafeIn);
 	ptrTwinSafeInWithoutHW^:=T_TwinSafeInWithoutHW;
 END_IF
@@ -34444,6 +34448,7 @@ STRUCT
 	iNumberOfGrooves:INT;
 
 	iSpeedGrindSpindle:INT;						(* IGS *)
+	rGrindSpindleTiltAngleTolerance:REAL; 			(* BEF *)
 END_STRUCT
 END_TYPE
 (* @END_DECLARATION := '0' *)
@@ -34697,7 +34702,7 @@ STRUCT
 	rNewGrindSpindleSpeed:REAL;		(* IGS *)
 	iGrindSpindleLoad:INT;			(* IGS *)
 	rGrindSpindleTiltSensor:REAL;		(* IGS *)
-	rGrindSpindleTiltAngleTarget:REAL; 	(*BEF*)
+	rGrindSpindleTiltAngleTarget:REAL; 	(* BEF *)
 	xGrindSpindleProtection:BOOL;		(* IGS TODO *)
 	xGrindSpindleCW:BOOL;			(* IGS *)
 
@@ -35333,7 +35338,7 @@ VAR_GLOBAL
 
 (*Simulationsvariablen*)
 	gxSimuHW: BOOL:=FALSE;							(*Hardware-Simulation bei Ofline Test*)
-	xForceSafeInWithoutHW: BOOL:= FALSE; 				(*Use this variable to force the Safe HW Inputs with T_TwinSafeInWithoutHW during runtime *)
+	gxForceSafeInWithoutHW: BOOL:= FALSE; 				(*Use this variable to force the Safe HW Inputs with T_TwinSafeInWithoutHW during runtime *)
 END_VAR
 (* @OBJECT_END := 'Globale_Variablen' *)
 (* @CONNECTIONS := Globale_Variablen
