@@ -9390,6 +9390,7 @@ FOR iCounterLanguage:=1 TO 3 DO
 			5:			sTmpText2:=ptrErrorList^.T_LanguagList[63];		(* 'On the MicroWire it is not possible to Referencing' *)
 			6:			sTmpText2:=ptrErrorList^.T_LanguagList[65];		(* 'At least one Ecostep CANOpen Controller failed!' *)
 			7:			sTmpText2:=ptrErrorList^.T_LanguagList[66];		(* 'No Air Pressure' *)
+			8:			sTmpText2:=ptrErrorList^.T_LanguagList[69];		(* 'Grind spindle TiltAngle not in target range' *)
 			16#F201:		sTmpText2:=ptrErrorList^.T_LanguagList[53];		(* 'Settled parameter for ToolLength is to long' *)
 			16#F202:		sTmpText2:=ptrErrorList^.T_LanguagList[54];		(* 'Settled parameter for ToolLength is to short' *)
 			16#F203:		sTmpText2:=ptrErrorList^.T_LanguagList[55];		(* 'Settled parameter for ToolDiameter is to big' *)
@@ -9587,7 +9588,7 @@ T_ErrorList.asErrorListEnglish.T_LanguagList[65]:='At least one Ecostep CANOpen 
 T_ErrorList.asErrorListEnglish.T_LanguagList[66]:='No Air Pressure';
 T_ErrorList.asErrorListEnglish.T_LanguagList[67]:='At least one settled diameter is bigger than ToolDiameter';
 T_ErrorList.asErrorListEnglish.T_LanguagList[68]:='ToolTension is active';
-T_ErrorList.asErrorListEnglish.T_LanguagList[69]:='';
+T_ErrorList.asErrorListEnglish.T_LanguagList[69]:='Grind spindle TiltAngle not in target range';
 T_ErrorList.asErrorListEnglish.T_LanguagList[70]:='';
 T_ErrorList.asErrorListEnglish.T_LanguagList[71]:='';
 T_ErrorList.asErrorListEnglish.T_LanguagList[72]:='';
@@ -9761,7 +9762,7 @@ T_ErrorList.asErrorListDeutsch.T_LanguagList[65]:='At least one Ecostep CANOpen 
 T_ErrorList.asErrorListDeutsch.T_LanguagList[66]:='No Air Pressure';
 T_ErrorList.asErrorListDeutsch.T_LanguagList[67]:='At least one settled diameter is bigger than ToolDiameter';
 T_ErrorList.asErrorListDeutsch.T_LanguagList[68]:='ToolTension is active';
-T_ErrorList.asErrorListDeutsch.T_LanguagList[69]:='';
+T_ErrorList.asErrorListDeutsch.T_LanguagList[69]:='Grind spindle TiltAngle not in target range';
 T_ErrorList.asErrorListDeutsch.T_LanguagList[70]:='';
 T_ErrorList.asErrorListDeutsch.T_LanguagList[71]:='';
 T_ErrorList.asErrorListDeutsch.T_LanguagList[72]:='';
@@ -9935,7 +9936,7 @@ T_ErrorList.asErrorListFrancais.T_LanguagList[65]:='At least one Ecostep CANOpen
 T_ErrorList.asErrorListFrancais.T_LanguagList[66]:='No Air Pressure';
 T_ErrorList.asErrorListFrancais.T_LanguagList[67]:='At least one settled diameter is bigger than ToolDiameter';
 T_ErrorList.asErrorListFrancais.T_LanguagList[68]:='ToolTension is active';
-T_ErrorList.asErrorListFrancais.T_LanguagList[69]:='';
+T_ErrorList.asErrorListFrancais.T_LanguagList[69]:='Grind spindle TiltAngle not in target range';
 T_ErrorList.asErrorListFrancais.T_LanguagList[70]:='';
 T_ErrorList.asErrorListFrancais.T_LanguagList[71]:='';
 T_ErrorList.asErrorListFrancais.T_LanguagList[72]:='';
@@ -10039,6 +10040,7 @@ T_ErrorList.asErrorListFrancais.T_LanguagList[169]:='';
 T_ErrorList.asErrorListFrancais.T_LanguagList[170]:='';
 T_ErrorList.asErrorListFrancais.T_LanguagList[171]:='';
 T_ErrorList.asErrorListFrancais.T_LanguagList[172]:='';
+
 
 END_FUNCTION_BLOCK
 
@@ -11058,6 +11060,15 @@ IF xStartMainPrc AND NOT(xSetEnd) AND NOT(xSetError) THEN
 					diTmpErrNr:=2;			(* Tool is not clamped *)
 				END_IF;
 				(*22.12.2009: KFS	} *)
+			END_IF;
+			(* Only for MicroRod, check if the tilt angle is set correclty *)
+			IF xMicroRodActive THEN
+				(*08.08.2025: BEF*)
+				IF T_Station.THardware.TAxisGrindSpindle.T_LiveValue.lrActualPosition > (T_ExchgParam.T_StationCommon.rGrindSpindleTiltAngleTarget + T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance) OR
+					T_Station.THardware.TAxisGrindSpindle.T_LiveValue.lrActualPosition < (T_ExchgParam.T_StationCommon.rGrindSpindleTiltAngleTarget - T_NovRAMData.T_ProcessImageData.T_AutoGroovePara.rGrindSpindleTiltAngleTolerance) THEN
+					xSetError:=TRUE;
+					diTmpErrNr:=8;			(* Grind spindle TiltAngle not in target range *)
+				END_IF
 			END_IF;
 			(* Only for MicroRod, check if the Machine is referenced *)
 			IF xMicroRodActive THEN
@@ -16954,6 +16965,7 @@ VAR_IN_OUT
 	TAxisToolRight:ST_AXIS;		(* data structure for the ToolRight axis *)
 	TAxisToolFeeder:ST_AXIS;		(* data structure for the ToolFeeder axis *)
 	TAxisGrindFeeder:ST_AXIS;	(* data structure for the GrindFeeder axis *)
+	TAxisGrindSpindle:ST_AXIS;	(* data structure for the GrindSpindle axis *)
 	T_WorkTool:ST_WORKTOOL;	(* Tool parameter *)
 	(* KFS 03.09.2010* { *)
 	rStartPosAutoGrooveToolRotation:REAL;
@@ -18208,6 +18220,7 @@ IF xStartFunction AND NOT(xSetEnd) THEN
 									TAxisToolRight:=ptrTAxisToolRight^,
 									TAxisToolFeeder:=ptrTAxisToolFeeder^,
 									TAxisGrindFeeder:= ptrTAxisGrindFeeder^,
+									TAxisGrindSpindle:= ptrTAxisGrindSpindle^,
 									T_WorkTool:=TStation.T_WorkTool,
 									rStartPosAutoGrooveToolRotation:=TStation.rStartPosAutoGrooveToolRotation,
 									xEnd=>ptrTFunction^.xEnd,
